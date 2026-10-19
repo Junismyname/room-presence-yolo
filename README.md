@@ -13,7 +13,7 @@ Unlike generic pre-trained detectors that attempt to generalize across thousands
 ### Key Performance Metrics
 
 * **Classification Accuracy:** 100.00% (on unseen test frames from the same room)
-* **Average Bounding Box IoU:** 0.9088 (Intersection over Union)
+* **Average Bounding Box IoU:** 0.7711 (Intersection over Union)
 * **False Positives / Negatives:** 0 / 0
 * **Inference Speed:** \~60+ FPS on NVIDIA RTX GPUs (1920x1080 native frame scaling)
 
@@ -97,7 +97,7 @@ room-presence-yolo/
     └── experimental.ipynb   # Scratchpad testing notebook
 ```
 
-## 🚀 Getting Started
+## Getting Started
 
 ### 1. Prerequisites & Environment Setup
 
