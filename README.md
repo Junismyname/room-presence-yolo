@@ -17,7 +17,7 @@ Unlike generic pre-trained detectors that attempt to generalize across thousands
 * **False Positives / Negatives:** 0 / 0
 * **Inference Speed:** \~60+ FPS on NVIDIA RTX GPUs (1920x1080 native frame scaling)
 
-## 🏗️ Architecture & Loss Design
+## Architecture & Loss Design
 
 ```text
                      +-----------------------+
