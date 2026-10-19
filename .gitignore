@@ -1,0 +1,20 @@
+# Datasets
+/dataset_frames/
+/dataset_labels/
+/test_frames/
+/test_labels/
+/raw_video/
+
+# Model Weights
+*.pth
+*.pt
+
+# Python Caches
+__pycache__/
+*.pyc
+
+# Environment
+.env
+venv/
+miniconda3/
+.ipynb_checkpoints/
