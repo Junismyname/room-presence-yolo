@@ -16,7 +16,14 @@ def main():
 
     my_transforms = transforms.Compose([
         transforms.ToTensor(),
-        transforms.Resize((256, 256))
+        transforms.Resize((256, 256)),
+        transforms.ColorJitter(brightness=0.3, contrast=0.3, saturation=0.2),
+        # Spatial & Camera Position Flexibility (Translation, Scaling, Minor Rotation)
+        transforms.RandomAffine(
+            degrees=5,            # Slight tilt (-5 to +5 degrees)
+            translate=(0.08, 0.08),# Shift camera position up to 8% horizontally/vertically
+            scale=(0.95, 1.05)    # Minor camera zoom in/out (95% to 105%)
+        ),
     ])
 
     dataset = RoomYOLODataset(img_dir='dataset_frames', label_dir='dataset_labels', transform=my_transforms)
@@ -26,7 +33,7 @@ def main():
     criterion = YOLOLoss().to(device)
     optimizer = optim.Adam(model.parameters(), lr=0.0001)
 
-    epochs = 500
+    epochs = 200
 
     for epoch in range(epochs):
         model.train()

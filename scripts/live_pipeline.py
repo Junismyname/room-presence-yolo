@@ -25,7 +25,7 @@ def main():
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
 
-    confidence_threshold = 0.50
+    confidence_threshold = 0.65
     buffer_count = 0
     BUFFER_MAX = 10
     prev_time = time.time()

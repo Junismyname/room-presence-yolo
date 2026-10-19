@@ -8,7 +8,7 @@ class YOLOLoss(nn.Module):
         self.mse = nn.MSELoss(reduction='none')
         
         # Force the model to care 5x more about the "Person" class
-        self.bce = nn.BCEWithLogitsLoss(reduction='mean', pos_weight=torch.tensor([5.0]))
+        self.bce = nn.BCEWithLogitsLoss(reduction='mean', pos_weight=torch.tensor([2.0]))
 
     def forward(self, predictions, targets):
         pred_conf = predictions[:, 0]

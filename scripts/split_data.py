@@ -1,6 +1,7 @@
 import os
 import shutil
 import random
+import sys
 
 def move_test_split(frames_dir='dataset_frames', 
                     labels_dir='dataset_labels', 
@@ -62,5 +63,47 @@ def move_test_split(frames_dir='dataset_frames',
     print(f"Moved {moved_labels_count} label files to '{test_labels_dir}'")
     print(f"Verified: 'classes.txt' remains untouched in '{labels_dir}'")
 
+
+def restore_test_split(frames_dir='dataset_frames', 
+                       labels_dir='dataset_labels', 
+                       test_frames_dir='test_frames', 
+                       test_labels_dir='test_labels'):
+    
+    if not os.path.exists(test_frames_dir) or not os.listdir(test_frames_dir):
+        print(f"No images found in '{test_frames_dir}' to restore.")
+        return
+
+    test_images = os.listdir(test_frames_dir)
+    restored_images_count = 0
+    restored_labels_count = 0
+
+    for img_name in test_images:
+        src_img = os.path.join(test_frames_dir, img_name)
+        dst_img = os.path.join(frames_dir, img_name)
+        
+        base_name = os.path.splitext(img_name)[0]
+        label_name = f"{base_name}.txt"
+        
+        src_label = os.path.join(test_labels_dir, label_name)
+        dst_label = os.path.join(labels_dir, label_name)
+        
+        # Move the image back
+        shutil.move(src_img, dst_img)
+        restored_images_count += 1
+        
+        # Move the label back if it exists
+        if os.path.exists(src_label):
+            shutil.move(src_label, dst_label)
+            restored_labels_count += 1
+
+    print("--- DATASET RESTORE COMPLETE ---")
+    print(f"Restored {restored_images_count} images back to '{frames_dir}'")
+    print(f"Restored {restored_labels_count} label files back to '{labels_dir}'")
+
+
 if __name__ == "__main__":
-    move_test_split()
+    # Check if the user passed the '--restore' flag
+    if len(sys.argv) > 1 and sys.argv[1] == '--restore':
+        restore_test_split()
+    else:
+        move_test_split()
