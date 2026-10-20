@@ -3,7 +3,7 @@
 An end-to-end custom PyTorch implementation of a lightweight, Dual-Head YOLO (You Only Look Once) architecture designed for real-time room presence detection and bounding box tracking using a fixed webcam setup.
 
 ## Detection Example
-![Live Detection Example](gifs/room_vid.gif)
+![Live Detection Example](gifs/room_vid.gif)\
 *Live inference from the Dual-Head SimpleYOLO model rendering the bounding box and confidence HUD.*
 
 ## Project Overview
