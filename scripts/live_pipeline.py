@@ -26,10 +26,6 @@ def main():
         from ultralytics import YOLO
         weight_name = 'yolo26n.pt' if args.model == 'yolo26' else 'yolov12n.pt'
         sota_model = YOLO(weight_name)
-    
-    elif args.model == 'rf-detr':
-        from rfdetr import RFDETR
-        sota_model = RFDETR('rfdetr-n.pt') 
 
     # ==========================================
     # TRACK 2: Custom PyTorch Initialization
@@ -87,13 +83,6 @@ def main():
                 raw_conf = float(results[0].boxes.conf[0])
                 if raw_conf >= confidence_threshold:
                     # YOLO returns [x1, y1, x2, y2] natively
-                    best_box = results[0].boxes.xyxy[0].cpu().numpy().astype(int)
-        
-        elif args.model == 'rf-detr':
-            results = sota_model.predict(frame, classes=[0], verbose=False)
-            if len(results[0].boxes) > 0:
-                raw_conf = float(results[0].boxes.conf[0])
-                if raw_conf >= confidence_threshold:
                     best_box = results[0].boxes.xyxy[0].cpu().numpy().astype(int)
 
         # ==========================================

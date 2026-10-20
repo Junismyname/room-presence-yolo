@@ -5,6 +5,13 @@ import argparse
 import cv2
 from torch.utils.data import DataLoader
 from torchvision import transforms
+from PIL import Image
+import logging
+import warnings
+
+warnings.filterwarnings("ignore")
+logging.getLogger().setLevel(logging.ERROR)
+os.environ["YOLO_VERBOSE"] = "False"
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from src import SimpleYOLO, MobileNetYOLO, RoomYOLODataset
@@ -40,7 +47,7 @@ def calculate_iou(boxA, boxB):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--model', type=str, default='simple', 
-                        choices=['simple', 'mobilenet', 'yolo26', 'yolo12', 'rf-detr'])
+                        choices=['simple', 'mobilenet', 'yolo26', 'yolo12'])
     args = parser.parse_args()
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -54,14 +61,10 @@ def main():
     # ==========================================
     # TRACK 1: SOTA SDK EVALUATION
     # ==========================================
-    if args.model in ['yolo26', 'yolo12', 'rf-detr']:
-        if args.model in ['yolo26', 'yolo12']:
-            from ultralytics import YOLO
-            weight_name = 'yolo26n.pt' if args.model == 'yolo26' else 'yolo12n.pt'
-            sota_model = YOLO(weight_name)
-        else:
-            from rfdetr import RFDETR
-            sota_model = RFDETR('rfdetr-n.pt')
+    if args.model in ['yolo26', 'yolo12']:
+        from ultralytics import YOLO
+        weight_name = 'yolo26n.pt' if args.model == 'yolo26' else 'yolo12n.pt'
+        sota_model = YOLO(weight_name)
 
         test_frames_dir = os.path.join(os.path.dirname(__file__), '..', 'test_frames')
         test_labels_dir = os.path.join(os.path.dirname(__file__), '..', 'test_labels')
@@ -90,19 +93,16 @@ def main():
             img = cv2.imread(img_path)
             h_orig, w_orig = img.shape[:2]
 
-            if args.model in ['yolo26', 'yolo12']:
-                results = sota_model(img, classes=[0], verbose=False)
-            else:
-                results = sota_model.predict(img, classes=[0], verbose=False)
-
             pred_conf = 0.0
             pred_box = None
 
+            results = sota_model(img, classes=[0], verbose=False)
+            
+            # Ultralytics Parsing
             if len(results[0].boxes) > 0:
                 raw_conf = float(results[0].boxes.conf[0])
                 if raw_conf >= 0.5:
                     pred_conf = 1.0
-                    # Convert absolute pixel coordinates to normalized 0.0-1.0 mapping
                     xyxy = results[0].boxes.xyxy[0].cpu().numpy()
                     x1, y1, x2, y2 = xyxy
                     pred_box = [
