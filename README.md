@@ -3,7 +3,7 @@
 An end-to-end custom PyTorch implementation of a lightweight, Dual-Head YOLO (You Only Look Once) architecture designed for real-time room presence detection and bounding box tracking using a fixed webcam setup.
 
 ## Detection Example
-![Live Detection Example](image1.jpg)
+![Live Detection Example](gifs/room_vid.gif)
 *Live inference from the Dual-Head SimpleYOLO model rendering the bounding box and confidence HUD.*
 
 ## Project Overview
@@ -12,10 +12,12 @@ Unlike generic pre-trained detectors that attempt to generalize across thousands
 
 ### Key Performance Metrics
 
-* **Classification Accuracy:** 100.00% (on unseen test frames from the same room)
-* **Average Bounding Box IoU:** 0.7711 (Intersection over Union)
-* **False Positives / Negatives:** 0 / 0
-* **Inference Speed:** \~60+ FPS on NVIDIA RTX GPUs (1920x1080 native frame scaling)
+* **Custom Dual-Head SimpleYOLO:** 100.00% Accuracy | 0.7711 Avg IoU
+* **Custom MobileNetYOLO (Transfer Learning):** 98.05% Accuracy | 0.7773 Avg IoU
+* **SOTA YOLO26 (Zero-Shot):** 75.77% Accuracy | 0.8853 Avg IoU
+* **SOTA YOLOv12 (Zero-Shot):** 74.09% Accuracy | 0.8788 Avg IoU
+
+*Inference Speed: ~60+ FPS on NVIDIA RTX GPUs (1920x1080 native frame scaling)*
 
 ## Architecture & Loss Design
 
@@ -67,6 +69,13 @@ To prevent gradient interference between presence classification and spatial coo
 * **Intentional Overfitting (Removal of `Dropout`):** Regularization layers like Dropout force a model to generalize. By omitting dropout, this model is intentionally allowed to overfit to the exact geometry, furniture placement, lighting conditions, and specific objects of the targeted room. It effectively memorizes the background to perform hyper-accurate background subtraction.
 * **Environment Specificity:** Because the model acts as a highly specialized memorization tool for one specific room, **it will not generalize to other rooms.** To reproduce this detection quality in a different area or from a different camera angle, a new training dataset must be gathered and the model must be retrained from scratch.
 
+### 4. The MobileNet Transfer Learning Track
+
+To benchmark custom architectures against generalized feature extraction, a secondary `MobileNetYOLO` class was introduced. 
+* **Backbone:** The pre-trained `MobileNetV2` feature extractor was utilized and mostly frozen, preventing the model from memorizing specific room furniture and forcing it to rely on generalized human geometry. The final four convolutional blocks (Layers 15-18) were unfrozen to allow for edge-detection fine-tuning specific to the room environment.
+* **Head Mapping:** A flattened split-head architecture maps the 8x8 spatial grid output to the confidence and bounding box coordinates, trained using Generalized Intersection over Union (GIoU) loss to mathematically enforce shape alignment and overlap.
+* **Performance Delta:** While State-of-the-Art models (YOLO26, YOLOv12) achieved superior bounding box tightness (0.88+ IoU), their zero-shot implementation resulted in lower classification accuracy (~75%) due to predicting hundreds of unmasked background COCO classes. The fine-tuned MobileNet track delivered the optimal balance: 98.05% Accuracy (eliminating background false positives) and 0.7773 Avg IoU.
+
 ## Live Visual HUD & State Machine
 
 The deployment script (`scripts/live_pipeline.py`) renders a real-time Heads-Up Display (HUD) over the native 1080p camera feed.
@@ -82,7 +91,7 @@ room-presence-yolo/
 ├── README.md                # Project documentation
 ├── requirements.txt         # Dependencies and PyTorch CUDA configuration
 ├── room_yolo_weights.pth    # Exported model weights (generated after training)
-├── image1.jpg               # Example detection screenshot
+├── gifs                      # Demo on live camera
 ├── src/                     # Core PyTorch package module
 │   ├── __init__.py          # Module exports
 │   ├── dataset.py           # RoomYOLODataset with in-memory tensor caching
