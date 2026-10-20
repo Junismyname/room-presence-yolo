@@ -5,7 +5,6 @@ import argparse
 import cv2
 from torch.utils.data import DataLoader
 from torchvision import transforms
-from PIL import Image
 import logging
 import warnings
 
