@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+from torchvision.models import mobilenet_v2, MobileNet_V2_Weights
 
 # Define the Simple YOLO Model
 class SimpleYOLO(nn.Module):
@@ -34,3 +35,38 @@ class SimpleYOLO(nn.Module):
         box_coords = torch.sigmoid(self.head_box(x)) 
         
         return torch.cat((conf_logits, box_coords), dim=1)
+
+# Pre-trained MobileNetV2-based YOLO Model
+class MobileNetYOLO(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.backbone = mobilenet_v2(weights=MobileNet_V2_Weights.DEFAULT).features
+        
+        for param in self.backbone.parameters():
+            param.requires_grad = False
+
+        for param in self.backbone[-4:].parameters():
+            param.requires_grad = True
+        self.flatten = nn.Flatten()
+        self.shared_fc = nn.Sequential(
+            nn.Linear(1280 * 8 * 8, 256),
+            nn.ReLU(),
+            nn.Dropout(0.3)
+        )
+        
+        self.conf_head = nn.Linear(256, 1)
+        
+        self.box_head = nn.Sequential(
+            nn.Linear(256, 4),
+            nn.Sigmoid()
+        )
+
+    def forward(self, x):
+        x = self.backbone(x)
+        x = self.flatten(x)
+        x = self.shared_fc(x)
+        
+        conf = self.conf_head(x)
+        box = self.box_head(x)
+
+        return torch.cat((conf, box), dim=1)

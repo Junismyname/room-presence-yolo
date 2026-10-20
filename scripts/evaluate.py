@@ -1,13 +1,14 @@
 import sys
 import os
 import torch
+import argparse
 from torch.utils.data import DataLoader
 from torchvision import transforms
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from src.dataset import RoomYOLODataset
-from src.model import SimpleYOLO
+# Import both architectures from your src module
+from src import SimpleYOLO, MobileNetYOLO, RoomYOLODataset
 
 def calculate_iou(boxA, boxB):
     xA1 = boxA[0] - (boxA[2] / 2)
@@ -37,14 +38,34 @@ def calculate_iou(boxA, boxB):
     return inter_area / union_area
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--model', type=str, default='simple', choices=['simple', 'mobilenet'])
+    args = parser.parse_args()
+
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    my_transforms = transforms.Compose([transforms.ToTensor(), transforms.Resize((256, 256))])
+    print(f"Evaluating model: {args.model.upper()}")
+
+    # Dynamically select model, weights, and transforms
+    if args.model == 'mobilenet':
+        model = MobileNetYOLO().to(device)
+        weights_filename = 'room_yolo_weights_mobilenet.pth'
+        my_transforms = transforms.Compose([
+            transforms.ToTensor(), 
+            transforms.Resize((256, 256)),
+            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+        ])
+    else:
+        model = SimpleYOLO().to(device)
+        weights_filename = 'room_yolo_weights_simple.pth'
+        my_transforms = transforms.Compose([
+            transforms.ToTensor(), 
+            transforms.Resize((256, 256))
+        ])
     
     test_dataset = RoomYOLODataset(img_dir='test_frames', label_dir='test_labels', transform=my_transforms)
     test_loader = DataLoader(test_dataset, batch_size=1, shuffle=False)
 
-    model = SimpleYOLO().to(device)
-    weights_path = os.path.join(os.path.dirname(__file__), '..', 'room_yolo_weights.pth')
+    weights_path = os.path.join(os.path.dirname(__file__), '..', weights_filename)
     model.load_state_dict(torch.load(weights_path, map_location=device))
     model.eval()
 

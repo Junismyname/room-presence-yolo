@@ -1,57 +1,132 @@
-import sys
-import os
+import argparse
 import cv2
 import time
 import torch
+import os
+import sys
 from torchvision import transforms
 
+# Import your custom architectures
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from src.model import SimpleYOLO
+from src.model import SimpleYOLO, MobileNetYOLO
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--model', type=str, default='simple', 
+                        choices=['simple', 'mobilenet', 'yolo26', 'yolov12', 'rf-detr'])
+    args = parser.parse_args()
+
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    print(f"Launching pipeline using: {args.model.upper()}")
 
-    model = SimpleYOLO().to(device)
-    weights_path = os.path.join(os.path.dirname(__file__), '..', 'room_yolo_weights.pth')
-    model.load_state_dict(torch.load(weights_path, map_location=device))
-    model.eval()
+    # ==========================================
+    # TRACK 1: SOTA SDK Initialization
+    # ==========================================
+    sota_model = None
+    if args.model in ['yolo26', 'yolov12']:
+        from ultralytics import YOLO
+        # The Ultralytics SDK will automatically download these weights on first run
+        weight_name = 'yolo26n.pt' if args.model == 'yolo26' else 'yolov12n.pt'
+        sota_model = YOLO(weight_name)
+    
+    elif args.model == 'rf-detr':
+        from rfdetr import RFDETR
+        # RF-DETR Nano is optimized for real-time edge CPU performance
+        sota_model = RFDETR('rfdetr-n.pt') 
 
-    preprocess = transforms.Compose([
-        transforms.ToTensor(),
-        transforms.Resize((256, 256))
-    ])
+    # ==========================================
+    # TRACK 2: Custom PyTorch Initialization
+    # ==========================================
+    elif args.model == 'mobilenet':
+        model = MobileNetYOLO().to(device)
+        weights_path = os.path.join(os.path.dirname(__file__), '..', 'room_yolo_weights_mobilenet.pth')
+        model.load_state_dict(torch.load(weights_path, map_location=device))
+        model.eval()
+        preprocess = transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Resize((256, 256)),
+            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+        ])
+    else:
+        model = SimpleYOLO().to(device)
+        weights_path = os.path.join(os.path.dirname(__file__), '..', 'room_yolo_weights_simple.pth')
+        model.load_state_dict(torch.load(weights_path, map_location=device))
+        model.eval()
+        preprocess = transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Resize((256, 256))
+        ])
 
-    cap = cv2.VideoCapture(0)
+    # ==========================================
+    # Camera Initialization
+    # ==========================================
+    cap = cv2.VideoCapture(1)
+    if not cap.isOpened():
+        cap = cv2.VideoCapture(0)
+
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
 
-    confidence_threshold = 0.65
+    confidence_threshold = 0.50
     buffer_count = 0
     BUFFER_MAX = 10
     prev_time = time.time()
-
-    print("Launching live pipeline... Press 'q' to quit.")
 
     while cap.isOpened():
         ret, frame = cap.read()
         if not ret: break
 
         h_orig, w_orig, _ = frame.shape
-        rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        input_tensor = preprocess(rgb_frame).unsqueeze(0).to(device)
+        is_occupied = False
+        raw_conf = 0.0
+        best_box = None
 
-        with torch.no_grad():
-            prediction = model(input_tensor).cpu()[0]
+        # ==========================================
+        # SOTA INFERENCE TRACK
+        # ==========================================
+        if args.model in ['yolo26', 'yolov12']:
+            # classes=[0] forces the model to ONLY look for humans, ignoring furniture
+            results = sota_model(frame, classes=[0], verbose=False)
+            if len(results[0].boxes) > 0:
+                raw_conf = float(results[0].boxes.conf[0])
+                if raw_conf >= confidence_threshold:
+                    # YOLO returns [x1, y1, x2, y2] natively
+                    best_box = results[0].boxes.xyxy[0].cpu().numpy().astype(int)
+        
+        elif args.model == 'rf-detr':
+            results = sota_model.predict(frame, classes=[0], verbose=False)
+            if len(results[0].boxes) > 0:
+                raw_conf = float(results[0].boxes.conf[0])
+                if raw_conf >= confidence_threshold:
+                    best_box = results[0].boxes.xyxy[0].cpu().numpy().astype(int)
 
-        raw_conf = torch.sigmoid(prediction[0]).item()
-        box_coords = prediction[1:5].numpy()
+        # ==========================================
+        # CUSTOM MODEL INFERENCE TRACK
+        # ==========================================
+        else:
+            rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            input_tensor = preprocess(rgb_frame).unsqueeze(0).to(device)
 
+            with torch.no_grad():
+                prediction = model(input_tensor).cpu()[0]
+
+            raw_conf = torch.sigmoid(prediction[0]).item()
+            if raw_conf >= confidence_threshold:
+                box_coords = prediction[1:5].numpy()
+                x_center, y_center, w, h = (int(c * s) for c, s in zip(box_coords, [w_orig, h_orig, w_orig, h_orig]))
+                best_box = [max(0, int(x_center - w/2)), max(0, int(y_center - h/2)),
+                            min(w_orig, int(x_center + w/2)), min(h_orig, int(y_center + h/2))]
+
+        # ==========================================
+        # State Machine & HUD Rendering
+        # ==========================================
         if raw_conf >= confidence_threshold:
             buffer_count = min(BUFFER_MAX, buffer_count + 1)
         else:
             buffer_count = max(0, buffer_count - 1)
 
         is_occupied = (buffer_count >= BUFFER_MAX)
+        
         curr_time = time.time()
         fps = 1.0 / (curr_time - prev_time + 1e-6)
         prev_time = curr_time
@@ -67,12 +142,8 @@ def main():
         if is_occupied:
             cv2.circle(frame, (w_orig - 30, 25), 10, (0, 0, 255), -1)
 
-        if raw_conf >= confidence_threshold:
-            x_center, y_center, w, h = (int(c * s) for c, s in zip(box_coords, [w_orig, h_orig, w_orig, h_orig]))
-            x1, y1 = max(0, int(x_center - w/2)), max(0, int(y_center - h/2))
-            x2, y2 = min(w_orig, int(x_center + w/2)), min(h_orig, int(y_center + h/2))
-
-            cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 3)
+        if best_box is not None:
+            cv2.rectangle(frame, (best_box[0], best_box[1]), (best_box[2], best_box[3]), (0, 255, 0), 3)
 
         cv2.imshow("Room Presence Monitor", frame)
         if cv2.waitKey(1) & 0xFF == ord('q'): break

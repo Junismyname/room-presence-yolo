@@ -3,15 +3,17 @@ import shutil
 import random
 import sys
 
-def move_test_split(frames_dir='dataset_frames', 
-                    labels_dir='dataset_labels', 
-                    test_frames_dir='test_frames', 
-                    test_labels_dir='test_labels', 
-                    ratio=0.15, 
-                    seed=42):
-    
-    # Set seed for reproducible random selection
-    random.seed(seed)
+dataset_frames_dir = os.path.join(os.getcwd(), "dataset_frames")
+dataset_labels_dir = os.path.join(os.getcwd(), "dataset_labels")
+test_frames_dir = os.path.join(os.getcwd(), "test_frames")
+test_labels_dir = os.path.join(os.getcwd(), "test_labels")
+
+def move_test_split(frames_dir=dataset_frames_dir, 
+                    labels_dir=dataset_labels_dir, 
+                    test_frames_dir=test_frames_dir, 
+                    test_labels_dir=test_labels_dir, 
+                    ratio=0.25
+                    ):
     
     # Create target directories
     os.makedirs(test_frames_dir, exist_ok=True)

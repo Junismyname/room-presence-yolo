@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+from torchvision.ops import generalized_box_iou_loss
 
 # Define the YOLO Loss Function
 class YOLOLoss(nn.Module):
@@ -20,17 +21,27 @@ class YOLOLoss(nn.Module):
         loss_conf = self.bce(pred_conf, target_conf)
 
         # Box Loss
-        mask = target_conf.unsqueeze(1)
-        raw_box_error = self.mse(pred_boxes, target_boxes) * mask
+        has_person_mask = (target_conf == 1.0)
         
-        num_active_boxes = target_conf.sum()
+        loss_box = torch.tensor(0.0, device=predictions.device)
         
-        if num_active_boxes > 0:
-            loss_box = raw_box_error.sum() / num_active_boxes
-        else:
-            loss_box = torch.tensor(0.0, device=predictions.device)
+        if has_person_mask.sum() > 0:
+            # Filter to only the positive frames
+            pred_box_pos = pred_boxes[has_person_mask]
+            target_box_pos = target_boxes[has_person_mask]
 
-        # Combine 
-        total_loss = loss_conf + (loss_box * 5.0)
-        
+            # Convert [x_center, y_center, w, h] to [x1, y1, x2, y2] for GIoU
+            pred_x1y1 = pred_box_pos[:, :2] - (pred_box_pos[:, 2:] / 2)
+            pred_x2y2 = pred_box_pos[:, :2] + (pred_box_pos[:, 2:] / 2)
+            pred_xyxy = torch.cat([pred_x1y1, pred_x2y2], dim=1)
+
+            target_x1y1 = target_box_pos[:, :2] - (target_box_pos[:, 2:] / 2)
+            target_x2y2 = target_box_pos[:, :2] + (target_box_pos[:, 2:] / 2)
+            target_xyxy = torch.cat([target_x1y1, target_x2y2], dim=1)
+
+            # 3. Calculate GIoU Loss (Directly optimizes overlap and shape alignment)
+            loss_box = generalized_box_iou_loss(pred_xyxy, target_xyxy, reduction='mean')
+
+        # Combine losses (Box loss gets a heavier multiplier to force tight bounds)
+        total_loss = loss_conf + (5.0 * loss_box)
         return total_loss
