@@ -6,14 +6,13 @@ import os
 import sys
 from torchvision import transforms
 
-# Import your custom architectures
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from src.model import SimpleYOLO, MobileNetYOLO
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--model', type=str, default='simple', 
-                        choices=['simple', 'mobilenet', 'yolo26', 'yolov12', 'rf-detr'])
+                        choices=['simple', 'mobilenet', 'yolo26', 'yolo12', 'rf-detr'])
     args = parser.parse_args()
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -23,15 +22,13 @@ def main():
     # TRACK 1: SOTA SDK Initialization
     # ==========================================
     sota_model = None
-    if args.model in ['yolo26', 'yolov12']:
+    if args.model in ['yolo26', 'yolo12']:
         from ultralytics import YOLO
-        # The Ultralytics SDK will automatically download these weights on first run
         weight_name = 'yolo26n.pt' if args.model == 'yolo26' else 'yolov12n.pt'
         sota_model = YOLO(weight_name)
     
     elif args.model == 'rf-detr':
         from rfdetr import RFDETR
-        # RF-DETR Nano is optimized for real-time edge CPU performance
         sota_model = RFDETR('rfdetr-n.pt') 
 
     # ==========================================
@@ -84,8 +81,7 @@ def main():
         # ==========================================
         # SOTA INFERENCE TRACK
         # ==========================================
-        if args.model in ['yolo26', 'yolov12']:
-            # classes=[0] forces the model to ONLY look for humans, ignoring furniture
+        if args.model in ['yolo26', 'yolo12']:
             results = sota_model(frame, classes=[0], verbose=False)
             if len(results[0].boxes) > 0:
                 raw_conf = float(results[0].boxes.conf[0])

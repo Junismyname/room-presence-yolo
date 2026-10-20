@@ -2,12 +2,11 @@ import sys
 import os
 import torch
 import argparse
+import cv2
 from torch.utils.data import DataLoader
 from torchvision import transforms
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-
-# Import both architectures from your src module
 from src import SimpleYOLO, MobileNetYOLO, RoomYOLODataset
 
 def calculate_iou(boxA, boxB):
@@ -37,65 +36,142 @@ def calculate_iou(boxA, boxB):
     if union_area == 0: return 0.0
     return inter_area / union_area
 
+
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--model', type=str, default='simple', choices=['simple', 'mobilenet'])
+    parser.add_argument('--model', type=str, default='simple', 
+                        choices=['simple', 'mobilenet', 'yolo26', 'yolo12', 'rf-detr'])
     args = parser.parse_args()
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"Evaluating model: {args.model.upper()}")
 
-    # Dynamically select model, weights, and transforms
-    if args.model == 'mobilenet':
-        model = MobileNetYOLO().to(device)
-        weights_filename = 'room_yolo_weights_mobilenet.pth'
-        my_transforms = transforms.Compose([
-            transforms.ToTensor(), 
-            transforms.Resize((256, 256)),
-            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-        ])
-    else:
-        model = SimpleYOLO().to(device)
-        weights_filename = 'room_yolo_weights_simple.pth'
-        my_transforms = transforms.Compose([
-            transforms.ToTensor(), 
-            transforms.Resize((256, 256))
-        ])
-    
-    test_dataset = RoomYOLODataset(img_dir='test_frames', label_dir='test_labels', transform=my_transforms)
-    test_loader = DataLoader(test_dataset, batch_size=1, shuffle=False)
-
-    weights_path = os.path.join(os.path.dirname(__file__), '..', weights_filename)
-    model.load_state_dict(torch.load(weights_path, map_location=device))
-    model.eval()
-
     correct_classifications = 0
     total_iou = 0.0
     true_positives = 0
+    total_images = 0
 
-    with torch.no_grad():
-        for images, targets in test_loader:
-            images = images.to(device)
-            targets = targets.cpu()[0]
-            
-            predictions = model(images).cpu()[0]
-            pred_conf = torch.sigmoid(predictions[0]).item()
-            
-            target_conf = targets[0].item()
-            pred_class = 1.0 if pred_conf > 0.5 else 0.0
-            
+    # ==========================================
+    # TRACK 1: SOTA SDK EVALUATION
+    # ==========================================
+    if args.model in ['yolo26', 'yolo12', 'rf-detr']:
+        if args.model in ['yolo26', 'yolo12']:
+            from ultralytics import YOLO
+            weight_name = 'yolo26n.pt' if args.model == 'yolo26' else 'yolo12n.pt'
+            sota_model = YOLO(weight_name)
+        else:
+            from rfdetr import RFDETR
+            sota_model = RFDETR('rfdetr-n.pt')
+
+        test_frames_dir = os.path.join(os.path.dirname(__file__), '..', 'test_frames')
+        test_labels_dir = os.path.join(os.path.dirname(__file__), '..', 'test_labels')
+        valid_extensions = ('.jpg', '.jpeg', '.png')
+        
+        image_files = [f for f in os.listdir(test_frames_dir) if f.lower().endswith(valid_extensions)]
+        total_images = len(image_files)
+
+        for img_name in image_files:
+            img_path = os.path.join(test_frames_dir, img_name)
+            label_name = os.path.splitext(img_name)[0] + '.txt'
+            label_path = os.path.join(test_labels_dir, label_name)
+
+            # Read Ground Truth Target
+            target_conf = 0.0
+            target_box = None
+            if os.path.exists(label_path):
+                with open(label_path, 'r') as f:
+                    lines = f.readlines()
+                    if lines and len(lines[0].strip()) > 0:
+                        parts = lines[0].strip().split()
+                        target_conf = 1.0
+                        target_box = [float(x) for x in parts[1:5]]
+
+            # Read Image and Run Inference
+            img = cv2.imread(img_path)
+            h_orig, w_orig = img.shape[:2]
+
+            if args.model in ['yolo26', 'yolo12']:
+                results = sota_model(img, classes=[0], verbose=False)
+            else:
+                results = sota_model.predict(img, classes=[0], verbose=False)
+
+            pred_conf = 0.0
+            pred_box = None
+
+            if len(results[0].boxes) > 0:
+                raw_conf = float(results[0].boxes.conf[0])
+                if raw_conf >= 0.5:
+                    pred_conf = 1.0
+                    # Convert absolute pixel coordinates to normalized 0.0-1.0 mapping
+                    xyxy = results[0].boxes.xyxy[0].cpu().numpy()
+                    x1, y1, x2, y2 = xyxy
+                    pred_box = [
+                        ((x1 + x2) / 2) / w_orig,
+                        ((y1 + y2) / 2) / h_orig,
+                        (x2 - x1) / w_orig,
+                        (y2 - y1) / h_orig
+                    ]
+
+            # Tally Metrics
+            pred_class = 1.0 if pred_conf >= 0.5 else 0.0
             if pred_class == target_conf:
                 correct_classifications += 1
-                
+            
             if pred_class == 1.0 and target_conf == 1.0:
-                pred_box = predictions[1:5].numpy()
-                target_box = targets[1:5].numpy()
                 iou = calculate_iou(pred_box, target_box)
                 total_iou += iou
                 true_positives += 1
 
-    total_images = len(test_dataset)
-    class_acc = (correct_classifications / total_images) * 100
+    # ==========================================
+    # TRACK 2: CUSTOM PYTORCH EVALUATION
+    # ==========================================
+    else:
+        if args.model == 'mobilenet':
+            model = MobileNetYOLO().to(device)
+            weights_filename = 'room_yolo_weights_mobilenet.pth'
+            my_transforms = transforms.Compose([
+                transforms.ToTensor(), 
+                transforms.Resize((256, 256)),
+                transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+            ])
+        else:
+            model = SimpleYOLO().to(device)
+            weights_filename = 'room_yolo_weights_simple.pth'
+            my_transforms = transforms.Compose([
+                transforms.ToTensor(), 
+                transforms.Resize((256, 256))
+            ])
+        
+        test_dataset = RoomYOLODataset(img_dir='test_frames', label_dir='test_labels', transform=my_transforms)
+        test_loader = DataLoader(test_dataset, batch_size=1, shuffle=False)
+        total_images = len(test_dataset)
+
+        weights_path = os.path.join(os.path.dirname(__file__), '..', weights_filename)
+        model.load_state_dict(torch.load(weights_path, map_location=device))
+        model.eval()
+
+        with torch.no_grad():
+            for images, targets in test_loader:
+                images = images.to(device)
+                targets = targets.cpu()[0]
+                
+                predictions = model(images).cpu()[0]
+                pred_conf = torch.sigmoid(predictions[0]).item()
+                
+                target_conf = targets[0].item()
+                pred_class = 1.0 if pred_conf > 0.5 else 0.0
+                
+                if pred_class == target_conf:
+                    correct_classifications += 1
+                    
+                if pred_class == 1.0 and target_conf == 1.0:
+                    pred_box = predictions[1:5].numpy()
+                    target_box = targets[1:5].numpy()
+                    iou = calculate_iou(pred_box, target_box)
+                    total_iou += iou
+                    true_positives += 1
+
+    class_acc = (correct_classifications / total_images) * 100 if total_images > 0 else 0
     avg_iou = (total_iou / true_positives) if true_positives > 0 else 0.0
 
     print(f"--- EVALUATION REPORT ---")
