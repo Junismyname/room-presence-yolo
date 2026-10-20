@@ -12,7 +12,7 @@ Unlike generic pre-trained detectors that attempt to generalize across thousands
 
 ### Key Performance Metrics
 
-* **Custom Dual-Head SimpleYOLO:** 100.00% Accuracy | 0.7711 Avg IoU
+* **Custom Dual-Head SimpleYOLO:** 97.77% Accuracy | 0.5069 Avg IoU
 * **Custom MobileNetYOLO (Transfer Learning):** 98.05% Accuracy | 0.7773 Avg IoU
 * **SOTA YOLO26 (Zero-Shot):** 75.77% Accuracy | 0.8853 Avg IoU
 * **SOTA YOLOv12 (Zero-Shot):** 74.09% Accuracy | 0.8788 Avg IoU
@@ -91,7 +91,7 @@ room-presence-yolo/
 ├── README.md                # Project documentation
 ├── requirements.txt         # Dependencies and PyTorch CUDA configuration
 ├── room_yolo_weights.pth    # Exported model weights (generated after training)
-├── gifs                      # Demo on live camera
+├── gifs                     # Demo on live camera
 ├── src/                     # Core PyTorch package module
 │   ├── __init__.py          # Module exports
 │   ├── dataset.py           # RoomYOLODataset with in-memory tensor caching
