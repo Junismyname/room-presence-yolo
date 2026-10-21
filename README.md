@@ -113,7 +113,7 @@ room-presence-yolo/
 Clone the repository and install the dependencies:
 
 ```bash
-git clone https://github.com/your-username/room-presence-yolo.git
+git clone https://github.com/Junismyname/room-presence-yolo.git
 cd room-presence-yolo
 
 # Create a virtual environment (optional but recommended)
